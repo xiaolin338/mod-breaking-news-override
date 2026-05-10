@@ -31,7 +31,7 @@ BreakingNews.Title = "Breaking News"
 #        Default:     "./breakingnews.html"
 #
 
-BreakingNews.HtmlPath = "./breakingnews.html"
+BreakingNews.Url  = "http://www.baidu.com/rolenews.html"
 
 #
 #    BreakingNews.Cache
