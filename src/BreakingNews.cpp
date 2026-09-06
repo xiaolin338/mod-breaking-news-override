@@ -3,6 +3,90 @@
  */
 
 #include "BreakingNews.h"
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/version.hpp>
+#include <boost/asio/connect.hpp>
+#include <boost/asio/ip/tcp.hpp>
+
+namespace beast = boost::beast;
+namespace http = beast::http;
+namespace net = boost::asio;
+using tcp = net::ip::tcp;
+
+bool FetchRemoteContent(const std::string& host, const std::string& port, const std::string& target, std::string& result)
+{
+    try 
+    {
+        net::io_context ioc;
+        tcp::resolver resolver(ioc);
+        tcp::socket socket(ioc);
+        auto const results = resolver.resolve(host, port);
+        net::connect(socket, results.begin(), results.end());
+
+        http::request<http::string_body> req{http::verb::get, target, 11};
+        req.set(http::field::host, host);
+        req.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+
+        http::write(socket, req);
+
+        beast::flat_buffer buffer;
+        http::response<http::dynamic_body> res;
+        http::read(socket, buffer, res);
+
+        result = beast::buffers_to_string(res.body().data());
+        result.erase(std::remove(result.begin(), result.end(), '\r'), result.end());
+        result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
+        return true;
+    }
+    catch (std::exception const& e)
+    {
+        LOG_ERROR("module", "Boost.Beast Error: {}", e.what());
+        return false;
+    }
+}
+
+bool TryReadNews(std::string& bn_Result)
+{
+    std::string url = sConfigMgr->GetOption<std::string>("BreakingNews.Url", "");
+    if (url.empty())
+    {
+        LOG_ERROR("module", "BreakingNews.Url is not configured");
+        return false;
+    }
+
+    // 解析协议部分（如http://或https://）
+    size_t protocol_end = url.find("://");
+    if (protocol_end != std::string::npos)
+        url = url.substr(protocol_end + 3); // 移除协议头
+
+    std::string host, port, target;
+
+    // 分离主机/端口和路径
+    size_t path_start = url.find('/');
+    if (path_start != std::string::npos)
+    {
+        host = url.substr(0, path_start);
+        target = url.substr(path_start);
+    }
+    else
+    {
+        host = url;
+        target = "/";
+    }
+
+    // 分离主机和端口
+    size_t colon_pos = host.find(':');
+    if (colon_pos != std::string::npos)
+    {
+        port = host.substr(colon_pos + 1);
+        host = host.substr(0, colon_pos);
+    }
+    else
+        port = "80"; // 默认HTTP端口
+
+    return FetchRemoteContent(host, port, target, bn_Result);
+}
 
 bool TryReadFile(std::string& path, std::string& bn_Result)
 {
@@ -23,7 +107,8 @@ bool TryReadFile(std::string& path, std::string& bn_Result)
     return true;
 }
 
-bool TryReadNews(std::string& bn_Result)
+
+bool TryReadNewsBAK(std::string& bn_Result)
 {
     std::string path = sConfigMgr->GetOption<std::string>("BreakingNews.HtmlPath", "./Updates.html");
     bn_Title = sConfigMgr->GetOption<std::string>("BreakingNews.Title", "Breaking News");
